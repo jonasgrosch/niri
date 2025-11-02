@@ -4296,6 +4296,27 @@ impl Niri {
                 ));
             }
 
+            let layer_map = layer_map_for_output(output);
+            let mut layer_elems = SplitElements::default();
+            let mut extend_from_layer = |layer| {
+                self.render_layer_filtered(
+                    renderer,
+                    target,
+                    &layer_map,
+                    layer,
+                    &mut layer_elems,
+                    false,
+                    |mapped| mapped.show_when_locked(),
+                );
+            };
+
+            extend_from_layer(Layer::Overlay);
+            extend_from_layer(Layer::Top);
+            extend_from_layer(Layer::Bottom);
+            extend_from_layer(Layer::Background);
+
+            elements.extend(layer_elems.into_iter().map(OutputRenderElements::from));
+
             // Draw the solid color background.
             elements.push(
                 SolidColorRenderElement::from_buffer(
@@ -4487,7 +4508,7 @@ impl Niri {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn render_layer<R: NiriRenderer>(
+    fn render_layer_filtered<R, F>(
         &self,
         renderer: &mut R,
         target: RenderTarget,
@@ -4495,10 +4516,18 @@ impl Niri {
         layer: Layer,
         elements: &mut SplitElements<LayerSurfaceRenderElement<R>>,
         for_backdrop: bool,
-    ) {
+        mut filter: F,
+    ) where
+        R: NiriRenderer,
+        F: FnMut(&MappedLayer) -> bool,
+    {
         // LayerMap returns layers in reverse stacking order.
         let iter = layer_map.layers_on(layer).rev().filter_map(|surface| {
             let mapped = self.mapped_layer_surfaces.get(surface)?;
+
+            if !filter(mapped) {
+                return None;
+            }
 
             if for_backdrop != mapped.place_within_backdrop() {
                 return None;
@@ -4510,6 +4539,27 @@ impl Niri {
         for (mapped, geo) in iter {
             elements.extend(mapped.render(renderer, geo.loc.to_f64(), target));
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_layer<R: NiriRenderer>(
+        &self,
+        renderer: &mut R,
+        target: RenderTarget,
+        layer_map: &LayerMap,
+        layer: Layer,
+        elements: &mut SplitElements<LayerSurfaceRenderElement<R>>,
+        for_backdrop: bool,
+    ) {
+        self.render_layer_filtered(
+            renderer,
+            target,
+            layer_map,
+            layer,
+            elements,
+            for_backdrop,
+            |_| true,
+        );
     }
 
     fn redraw(&mut self, backend: &mut Backend, output: &Output) {
