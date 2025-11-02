@@ -29,6 +29,9 @@ pub struct ResolvedLayerRules {
 
     /// Whether to bob this window up and down.
     pub baba_is_float: bool,
+
+    /// Whether to render this surface when the session is locked.
+    pub show_when_locked: bool,
 }
 
 impl ResolvedLayerRules {
@@ -56,6 +59,7 @@ impl ResolvedLayerRules {
             geometry_corner_radius: None,
             place_within_backdrop: false,
             baba_is_float: false,
+            show_when_locked: false,
         }
     }
 
@@ -97,6 +101,9 @@ impl ResolvedLayerRules {
             }
             if let Some(x) = rule.baba_is_float {
                 resolved.baba_is_float = x;
+            }
+            if let Some(x) = rule.show_when_locked {
+                resolved.show_when_locked = x;
             }
 
             resolved.shadow.merge_with(&rule.shadow);

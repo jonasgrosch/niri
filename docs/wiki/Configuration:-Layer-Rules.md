@@ -34,6 +34,7 @@ layer-rule {
     geometry-corner-radius 12
     place-within-backdrop true
     baba-is-float true
+    show-when-locked true
 }
 ```
 
@@ -189,5 +190,25 @@ layer-rule {
     match namespace="^launcher$"
 
     baba-is-float true
+}
+```
+
+#### `show-when-locked`
+
+<sup>Since: Unreleased</sup>
+
+Allow this surface to stay visible while the session is locked. The surface renders above the red
+lock backdrop but below any [`ext-session-lock`](https://wayland.app/protocols/ext-session-lock-v1)
+surface that might cover the screen.
+
+This can be useful for overlays that should remain visible on the lock screen, such as status
+indicators. Input is still blocked while locked.
+
+```kdl
+// Keep the status overlay visible on the lock screen.
+layer-rule {
+    match namespace="^status-overlay$"
+
+    show-when-locked true
 }
 ```
