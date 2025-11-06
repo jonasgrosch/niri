@@ -4511,25 +4511,11 @@ impl Niri {
             draw_opaque_regions(&mut elements, output_scale);
         }
 
-        // In case the optimized blur layer is dirty, re-render
-        // It only has the bottom and background layer shells drawn onto with blur applied.
-        //
-        // We must do it now before we actually render the previous render elements into the final
-        // composited blur buffer
-        let mut fx_buffers = EffectsFramebuffers::get(output);
-        let blur_config = self.config.borrow().layout.blur;
-
-        if blur_config.on && blur_config.passes > 0 {
-            if let Err(err) = fx_buffers.update_optimized_blur_buffer(
-                renderer.as_gles_renderer(),
-                layer_map,
-                output,
-                output_scale,
-                blur_config,
-            ) {
-                error!(?err, "Failed to update optimized blur buffer");
-            }
-        }
+        // NOTE: Optimized blur buffer update removed as we now use true blur for all windows.
+        // True blur computes the blur on-the-fly from the actual framebuffer content,
+        // making it responsive to dynamic wallpapers and window changes, similar to Hyprland.
+        // The optimized blur was only rendering static layer shells, which didn't provide
+        // the desired dynamic blur behavior.
 
         elements
     }
@@ -4564,7 +4550,16 @@ impl Niri {
             Some((mapped, geo))
         });
         for (mapped, geo) in iter {
-            elements.extend(mapped.render(renderer, geo.loc.to_f64(), target));
+            let blur_config = self.config.borrow().layout.blur;
+            let output_ref = Some(output);
+            elements.extend(mapped.render(
+                renderer,
+                geo.loc.to_f64(),
+                geo.size.to_f64(),
+                target,
+                output_ref,
+                Some(blur_config),
+            ));
         }
     }
 

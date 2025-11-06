@@ -12,6 +12,7 @@ use super::ResolvedLayerRules;
 use crate::animation::Clock;
 use crate::layout::shadow::Shadow;
 use crate::niri_render_elements;
+use crate::render_helpers::blur::element::BlurRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::shadow::ShadowRenderElement;
 use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
@@ -47,6 +48,7 @@ niri_render_elements! {
         Wayland = WaylandSurfaceRenderElement<R>,
         SolidColor = SolidColorRenderElement,
         Shadow = ShadowRenderElement,
+        Blur = BlurRenderElement,
     }
 }
 
@@ -165,7 +167,10 @@ impl MappedLayer {
         &self,
         renderer: &mut R,
         location: Point<f64, Logical>,
+        size: Size<f64, Logical>,
         target: RenderTarget,
+        output: Option<&smithay::output::Output>,
+        blur_config: Option<niri_config::Blur>,
     ) -> SplitElements<LayerSurfaceRenderElement<R>> {
         let mut rv = SplitElements::default();
 
@@ -217,6 +222,36 @@ impl MappedLayer {
         let location = location.to_physical_precise_round(scale).to_logical(scale);
         rv.normal
             .extend(self.shadow.render(renderer, location).map(Into::into));
+
+        // Add blur for layer surfaces with transparency if blur is enabled
+        if let (Some(output), Some(config)) = (output, blur_config) {
+            // Merge layer-specific blur rules with global blur config
+            let mut effective_blur = config;
+            effective_blur.merge_with(&self.rules.blur);
+
+            // Only render blur if enabled and has transparency (alpha < 1.0)
+            if effective_blur.on && effective_blur.passes > 0 && alpha < 1.0 {
+                let corner_radius = self.rules.geometry_corner_radius.unwrap_or_default();
+                
+                // Round size to physical pixels
+                let size = size.to_physical_precise_round(self.scale).to_logical(self.scale);
+                
+                // Always use true blur for layer surfaces to match the dynamic behavior
+                let blur_elem = BlurRenderElement::new(
+                    renderer,
+                    output,
+                    smithay::utils::Rectangle::from_loc_and_size(location.to_i32_round(), size.to_i32_round()),
+                    location.to_physical(self.scale).to_i32_round(),
+                    corner_radius.top_left,
+                    false, // Always use true blur for dynamic content
+                    self.scale,
+                    effective_blur,
+                );
+                
+                // Insert blur before the surface elements so it appears behind
+                rv.normal.insert(0, blur_elem.into());
+            }
+        }
 
         rv
     }
