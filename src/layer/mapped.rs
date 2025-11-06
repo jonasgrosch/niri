@@ -234,16 +234,20 @@ impl MappedLayer {
                 let corner_radius = self.rules.geometry_corner_radius.unwrap_or_default();
                 
                 // Round size to physical pixels for consistent sizing
-                let rounded_size = size.to_physical_precise_round(self.scale).to_logical(self.scale);
+                let layer_size = size.to_physical_precise_round(self.scale).to_logical(self.scale);
                 
-                // Always use true blur for layer surfaces to match the dynamic behavior
+                // Always use true blur (not optimized) for layer surfaces to match dynamic behavior.
+                // False = use true blur which samples from framebuffer on-the-fly.
+                // True = use optimized blur which uses pre-rendered static buffer.
+                const USE_OPTIMIZED_BLUR: bool = false;
+                
                 let blur_elem = BlurRenderElement::new(
                     renderer,
                     output,
-                    smithay::utils::Rectangle::from_loc_and_size(location.to_i32_round(), rounded_size.to_i32_round()),
+                    smithay::utils::Rectangle::from_loc_and_size(location.to_i32_round(), layer_size.to_i32_round()),
                     location.to_physical(self.scale).to_i32_round(),
                     corner_radius.top_left,
-                    false, // Always use true blur for dynamic content
+                    USE_OPTIMIZED_BLUR,
                     self.scale,
                     effective_blur,
                 );
