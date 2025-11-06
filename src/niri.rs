@@ -4309,6 +4309,7 @@ impl Niri {
                 self.render_layer_filtered(
                     renderer,
                     target,
+                    output,
                     &layer_map,
                     layer,
                     &mut layer_elems,
@@ -4396,7 +4397,7 @@ impl Niri {
         let layer_map = layer_map_for_output(output);
         let mut extend_from_layer =
             |elements: &mut SplitElements<LayerSurfaceRenderElement<R>>, layer, for_backdrop| {
-                self.render_layer(renderer, target, &layer_map, layer, elements, for_backdrop);
+                self.render_layer(renderer, target, output, &layer_map, layer, elements, for_backdrop);
             };
 
         // The overlay layer elements go next.
@@ -4525,6 +4526,7 @@ impl Niri {
         &self,
         renderer: &mut R,
         target: RenderTarget,
+        output: &Output,
         layer_map: &LayerMap,
         layer: Layer,
         elements: &mut SplitElements<LayerSurfaceRenderElement<R>>,
@@ -4568,6 +4570,7 @@ impl Niri {
         &self,
         renderer: &mut R,
         target: RenderTarget,
+        output: &Output,
         layer_map: &LayerMap,
         layer: Layer,
         elements: &mut SplitElements<LayerSurfaceRenderElement<R>>,
@@ -4576,6 +4579,7 @@ impl Niri {
         self.render_layer_filtered(
             renderer,
             target,
+            output,
             layer_map,
             layer,
             elements,
