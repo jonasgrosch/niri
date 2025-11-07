@@ -13,6 +13,7 @@ use crate::animation::Clock;
 use crate::layout::shadow::Shadow;
 use crate::niri_render_elements;
 use crate::render_helpers::blur::element::BlurRenderElement;
+use crate::render_helpers::blur::render_to_mask;
 use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::shadow::ShadowRenderElement;
 use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
@@ -246,7 +247,7 @@ impl MappedLayer {
                 // True = use optimized blur which uses pre-rendered static buffer.
                 const USE_OPTIMIZED_BLUR: bool = false;
                 
-                let blur_elem = BlurRenderElement::new(
+                let mut blur_elem = BlurRenderElement::new(
                     renderer,
                     output,
                     smithay::utils::Rectangle::from_loc_and_size(location.to_i32_round(), layer_size.to_i32_round()),
@@ -256,6 +257,21 @@ impl MappedLayer {
                     self.scale,
                     effective_blur,
                 );
+                
+                // Generate alpha mask if needed (when min_alpha/max_alpha are not at defaults)
+                if blur_elem.needs_mask() && !rv.normal.is_empty() {
+                    // Render layer surface elements to an alpha mask texture
+                    let layer_size_physical = layer_size.to_physical_precise_round(self.scale);
+                    if let Ok(mask) = render_to_mask(
+                        renderer,
+                        output,
+                        &rv.normal,
+                        scale,
+                        layer_size_physical,
+                    ) {
+                        blur_elem.set_mask_texture(mask);
+                    }
+                }
                 
                 // Push blur to the end so it's rendered first (elements are processed in reverse)
                 // This places blur behind the surface as a background blur effect

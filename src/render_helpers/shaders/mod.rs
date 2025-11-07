@@ -108,6 +108,10 @@ impl Shaders {
                     UniformName::new("alpha", UniformType::_1f),
                     UniformName::new("noise", UniformType::_1f),
                     UniformName::new("geo", UniformType::_4f),
+                    UniformName::new("min_alpha", UniformType::_1f),
+                    UniformName::new("max_alpha", UniformType::_1f),
+                    UniformName::new("has_mask", UniformType::_1f),
+                    UniformName::new("mask", UniformType::_1i),
                 ],
             )
             .map_err(|err| {

@@ -754,6 +754,42 @@ window-rule {
 }
 ```
 
+#### `blur`
+
+<sup>Since: 25.09</sup>
+
+Override the blur options for the window.
+
+This rule allows you to configure window blur effects with the following options:
+
+- `on` / `off`: Enable or disable blur for the window. The `on` flag has precedence over the `off` flag if both are set.
+- `passes`: Number of blur passes (default: 0)
+- `radius`: Blur radius in logical pixels, accepts integer or float values (default: 0.0)
+- `noise`: Noise amount to add to the blur (default: 0.0)
+- `min-alpha`: Minimum alpha threshold for blur effect (default: 0.0, range: 0.0-1.0)
+- `max-alpha`: Maximum alpha threshold for blur effect (default: 1.0, range: 0.0-1.0)
+
+The `min-alpha` and `max-alpha` parameters control how the blur effect responds to the window's alpha channel.
+When both are at their defaults (0.0 and 1.0), the blur effect is applied uniformly across all transparency levels.
+Adjusting these values allows you to create effects where blur only appears within certain alpha ranges,
+useful for creating fade effects or limiting blur to specific transparency levels.
+
+```kdl
+// Enable blur for transparent windows.
+window-rule {
+    match app-id="kitty"
+
+    blur {
+        on
+        passes 2
+        radius 8.0
+        noise 0.0
+        min-alpha 0.0
+        max-alpha 1.0
+    }
+}
+```
+
 #### `shadow`
 
 <sup>Since: 25.02</sup>

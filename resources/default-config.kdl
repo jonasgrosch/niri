@@ -346,6 +346,23 @@ window-rule {
     clip-to-geometry true
 }
 
+// Example: enable blur effect with alpha thresholds.
+// (This example rule is commented out with a "/-" in front.)
+/-window-rule {
+    blur {
+        on
+        passes 2
+        radius 8.0
+        noise 0.0
+        // min-alpha and max-alpha control the alpha threshold range for the blur effect.
+        // min-alpha defaults to 0.0, max-alpha defaults to 1.0.
+        // When both are at defaults, all alpha values are preserved.
+        // Adjusting these values can create interesting blur fade effects.
+        // min-alpha 0.0
+        // max-alpha 1.0
+    }
+}
+
 binds {
     // Keys consist of modifiers separated by + signs, followed by an XKB key name
     // in the end. To find an XKB name for a particular key, you may use a program

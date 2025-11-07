@@ -9,12 +9,17 @@ uniform samplerExternalOES text;
 uniform sampler2D text;
 #endif
 
+uniform sampler2D mask;
+uniform float has_mask;
+
 uniform float alpha;
 varying vec2 v_coords;
 
 uniform vec4 geo;           // x, y, width, height
 uniform float corner_radius;
 uniform float noise;
+uniform float min_alpha;
+uniform float max_alpha;
 
 float rounding_alpha(vec2 coords, vec2 size, float radius) {
     vec2 center;
@@ -57,6 +62,20 @@ void main() {
     color.rgb += noiseAmount * noise;
 
     color *= rounding_alpha(loc, size, corner_radius);
+
+    // Apply alpha threshold modulation
+    float source_alpha = color.a;
+    
+    // If we have a mask, sample it and use its alpha
+    if (has_mask > 0.5) {
+        vec4 mask_sample = texture2D(mask, v_coords);
+        source_alpha = mask_sample.a;
+    }
+    
+    // When min_alpha == 0 and max_alpha == 1, this has no effect (smoothstep(0,1,alpha) == alpha)
+    // Otherwise, it remaps the alpha range
+    float thresholded_alpha = smoothstep(min_alpha, max_alpha, source_alpha);
+    color.a = thresholded_alpha;
 
     color *= alpha;
 

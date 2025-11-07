@@ -21,6 +21,7 @@ use crate::animation::{Animation, Clock};
 use crate::layout::SizingMode;
 use crate::niri_render_elements;
 use crate::render_helpers::blur::element::BlurRenderElement;
+use crate::render_helpers::blur::render_to_mask;
 use crate::render_helpers::border::BorderRenderElement;
 use crate::render_helpers::clipped_surface::{ClippedSurfaceRenderElement, RoundedCornerDamage};
 use crate::render_helpers::damage::ExtraDamage;
@@ -1221,8 +1222,8 @@ impl<W: LayoutElement> Tile<W> {
             .chain(resize_shader)
             .chain(resize_fallback)
             .chain(window_popups.into_iter().flatten())
-            .chain(rounded_corner_damage)
-            .chain(window_surface.into_iter().flatten());
+            .chain(rounded_corner_damage);
+        // Note: window_surface is not chained here anymore - it's collected and used later
 
         let elem = (fullscreen_progress > 0.).then(|| {
             let alpha = fullscreen_progress as f32;
@@ -1283,25 +1284,46 @@ impl<W: LayoutElement> Tile<W> {
             .then(|| self.focus_ring.render(renderer, location).map(Into::into));
         let rv = rv.chain(elem.into_iter().flatten());
 
+        // Collect window surface elements for potential mask generation
+        let window_surface_vec: Vec<_> = window_surface
+            .into_iter()
+            .flatten()
+            .collect();
+
         let blur_element = (blur_config.on && output.is_some())
             .then(|| {
                 // Always use true blur (on-the-fly) for all windows to match Hyprland behavior.
                 // This ensures blur reflects actual background content dynamically.
                 let optimized = false;
+                let output_ref = output.unwrap();
 
-                Some(
-                    BlurRenderElement::new(
+                let mut blur_elem = BlurRenderElement::new(
+                    renderer,
+                    output_ref,
+                    area.to_i32_round(),
+                    window_render_loc.to_physical(self.scale).to_i32_round(),
+                    radius.top_left,
+                    optimized,
+                    self.scale,
+                    blur_config,
+                );
+
+                // Generate alpha mask if needed (when min_alpha/max_alpha are not at defaults)
+                if blur_elem.needs_mask() && !window_surface_vec.is_empty() {
+                    // Render window elements to an alpha mask texture
+                    let window_size_physical = window_size.to_physical_precise_round(self.scale);
+                    if let Ok(mask) = render_to_mask(
                         renderer,
-                        output.unwrap(),
-                        area.to_i32_round(),
-                        window_render_loc.to_physical(self.scale).to_i32_round(),
-                        radius.top_left,
-                        optimized,
-                        self.scale,
-                        blur_config,
-                    )
-                    .into(),
-                )
+                        output_ref,
+                        &window_surface_vec,
+                        Scale::from(self.scale),
+                        window_size_physical,
+                    ) {
+                        blur_elem.set_mask_texture(mask);
+                    }
+                }
+
+                Some(blur_elem.into())
             })
             .flatten()
             .into_iter();
@@ -1311,8 +1333,8 @@ impl<W: LayoutElement> Tile<W> {
 
         let rv = rv.chain(elem.into_iter().flatten());
 
-        // Render the blur element
-        rv.chain(blur_element)
+        // Render the blur element, then the window surface elements
+        rv.chain(blur_element).chain(window_surface_vec)
     }
 
     pub fn render<'a, R: NiriRenderer + 'a>(

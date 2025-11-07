@@ -154,7 +154,7 @@ use crate::pw_utils::{Cast, PipeWire};
 #[cfg(feature = "xdp-gnome-screencast")]
 use crate::pw_utils::{CastSizeChange, PwToNiri};
 use crate::render_helpers::blur::element::BlurRenderElement;
-use crate::render_helpers::blur::EffectsFramebuffers;
+use crate::render_helpers::blur::{render_to_mask, EffectsFramebuffers};
 use crate::render_helpers::debug::draw_opaque_regions;
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
@@ -4308,7 +4308,7 @@ impl Niri {
                 let blur_config = self.config.borrow().layout.blur;
                 if blur_config.on && blur_config.passes > 0 {
                     let output_size = output.current_mode().unwrap().size;
-                    let blur_elem = BlurRenderElement::new(
+                    let mut blur_elem = BlurRenderElement::new(
                         renderer,
                         output,
                         Rectangle::from_loc_and_size(
@@ -4321,6 +4321,21 @@ impl Niri {
                         output_scale.x,
                         blur_config,
                     );
+                    
+                    // Generate alpha mask if needed (when min_alpha/max_alpha are not at defaults)
+                    if blur_elem.needs_mask() && !lock_elements.is_empty() {
+                        // Render lock surface elements to an alpha mask texture
+                        if let Ok(mask) = render_to_mask(
+                            renderer,
+                            output,
+                            &lock_elements,
+                            output_scale,
+                            output_size,
+                        ) {
+                            blur_elem.set_mask_texture(mask);
+                        }
+                    }
+                    
                     // Extend with lock surface elements, then add blur
                     // Elements are rendered in reverse order, so blur (added last) renders first (behind)
                     elements.extend(lock_elements.into_iter().map(Into::into));

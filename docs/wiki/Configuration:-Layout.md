@@ -377,6 +377,44 @@ layout {
 }
 ```
 
+### `blur`
+
+<sup>Since: 25.09</sup>
+
+Configure the blur effect for windows. This feature requires window transparency to be visible.
+
+Set `on` to enable blur globally (can be overridden per-window with window rules).
+
+`passes` controls the number of blur passes. More passes create a smoother blur but may impact performance. Default is 0.
+
+`radius` controls the blur radius in logical pixels. Can be an integer or float value between 0 and 1024. Default is 0.0.
+
+`noise` adds visual noise to the blurred result, which can help mask banding artifacts. Default is 0.0.
+
+`min-alpha` and `max-alpha` control the alpha threshold range for the blur effect. Both accept values between 0.0 and 1.0.
+- `min-alpha` sets the minimum alpha threshold (default: 0.0)
+- `max-alpha` sets the maximum alpha threshold (default: 1.0)
+
+When both are at their defaults, the blur effect is applied uniformly across all transparency levels.
+Adjusting these values allows you to create effects where blur only appears within certain alpha ranges.
+The shader uses `smoothstep(min-alpha, max-alpha, alpha)` to remap the alpha values, creating smooth transitions at the threshold boundaries.
+
+```kdl
+// Enable blur globally in the layout.
+layout {
+    blur {
+        on
+        passes 2
+        radius 8.0
+        noise 0.0
+        min-alpha 0.0
+        max-alpha 1.0
+    }
+}
+```
+
+You can also configure blur per-window using [window rules](./Configuration:-Window-Rules.md#blur).
+
 ### `shadow`
 
 <sup>Since: 25.02</sup>
