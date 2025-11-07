@@ -4295,14 +4295,14 @@ impl Niri {
             let state = self.output_state.get(output).unwrap();
             if let Some(surface) = state.lock_surface.as_ref() {
                 // Render lock surface elements
-                let lock_elements: Vec<_> = render_elements_from_surface_tree(
+                let lock_elements: Vec<WaylandSurfaceRenderElement<R>> = render_elements_from_surface_tree(
                     renderer,
                     surface.wl_surface(),
                     (0, 0),
                     output_scale,
                     1.,
                     Kind::ScanoutCandidate,
-                ).collect();
+                );
                 
                 // Add background blur for lock surface if blur is enabled
                 let blur_config = self.config.borrow().layout.blur;
@@ -6556,6 +6556,7 @@ niri_render_elements! {
         Wayland = WaylandSurfaceRenderElement<R>,
         NamedPointer = MemoryRenderBufferRenderElement<R>,
         SolidColor = SolidColorRenderElement,
+        Blur = BlurRenderElement,
         ScreenshotUi = ScreenshotUiRenderElement,
         ExitConfirmDialog = ExitConfirmDialogRenderElement,
         Texture = PrimaryGpuTextureRenderElement,
