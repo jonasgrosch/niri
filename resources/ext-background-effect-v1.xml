@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="ext_background_effect_v1">
+  <copyright>
+    Copyright © 2024 Simon Ser
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice (including the next
+    paragraph) shall be included in all copies or substantial portions of the
+    Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+  </copyright>
+
+  <interface name="ext_background_effect_manager_v1" version="1">
+    <description summary="background effect manager">
+      This interface allows clients to request background effects for surfaces.
+
+      Warning! The protocol described in this file is currently in the testing
+      phase. Backward compatible changes may be added together with the
+      corresponding interface version bump. Backward incompatible changes can
+      only be done by creating a new major version of the extension.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the manager">
+        Destroy the manager. This doesn't destroy objects created with the
+        manager.
+      </description>
+    </request>
+
+    <request name="get_background_effect">
+      <description summary="request background effect for a surface">
+        Create a background effect object for a surface.
+
+        Only one background effect object can exist for a given surface. If
+        get_background_effect is called for a surface that already has a
+        background effect object, the compositor will raise a
+        background_effect_exists protocol error.
+
+        The surface must be a xdg_surface, ext_session_lock_surface_v1 or
+        wlr_layer_surface_v1. Otherwise the compositor will raise an
+        invalid_surface protocol error.
+      </description>
+      <arg name="id" type="new_id" interface="ext_background_effect_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <enum name="error">
+      <entry name="background_effect_exists" value="0"
+             summary="the surface already has a background effect object"/>
+      <entry name="invalid_surface" value="1"
+             summary="the surface is not a valid surface for background effects"/>
+    </enum>
+  </interface>
+
+  <interface name="ext_background_effect_v1" version="1">
+    <description summary="background effect for a surface">
+      This interface allows clients to request a background effect for a
+      surface.
+
+      When the effect object is destroyed, the effect is removed from the
+      surface.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the background effect">
+        Destroy the background effect object. This will remove the effect from
+        the surface.
+      </description>
+    </request>
+
+    <request name="set_effect">
+      <description summary="set the background effect">
+        Set the background effect for the surface.
+
+        This request is double-buffered, see wl_surface.commit.
+
+        The type argument defines the effect to apply. The compositor may
+        ignore the request if it doesn't support the effect, or if it decides
+        that the effect should not be applied.
+
+        An effect value of "none" removes the effect from the surface.
+      </description>
+      <arg name="type" type="string" summary="background effect type"/>
+    </request>
+  </interface>
+</protocol>

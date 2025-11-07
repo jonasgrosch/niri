@@ -143,6 +143,7 @@ use crate::layout::tile::TileRenderElement;
 use crate::layout::workspace::{Workspace, WorkspaceId};
 use crate::layout::{HitType, Layout, LayoutElement as _, MonitorRenderElement};
 use crate::niri_render_elements;
+use crate::protocols::background_effect::BackgroundEffectManagerState;
 use crate::protocols::ext_workspace::{self, ExtWorkspaceManagerState};
 use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
 use crate::protocols::gamma_control::GammaControlManagerState;
@@ -303,6 +304,7 @@ pub struct Niri {
     pub presentation_state: PresentationState,
     pub security_context_state: SecurityContextState,
     pub gamma_control_manager_state: GammaControlManagerState,
+    pub background_effect_state: BackgroundEffectManagerState,
     pub activation_state: XdgActivationState,
     pub mutter_x11_interop_state: MutterX11InteropManagerState,
 
@@ -2511,6 +2513,9 @@ impl Niri {
         let mutter_x11_interop_state =
             MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
 
+        let background_effect_state =
+            BackgroundEffectManagerState::new::<State, _>(&display_handle, client_is_unrestricted);
+
         #[cfg(test)]
         let single_pixel_buffer_state = SinglePixelBufferState::new::<State>(&display_handle);
 
@@ -2709,6 +2714,7 @@ impl Niri {
             presentation_state,
             security_context_state,
             gamma_control_manager_state,
+            background_effect_state,
             activation_state,
             mutter_x11_interop_state,
             #[cfg(test)]

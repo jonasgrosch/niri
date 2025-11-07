@@ -491,6 +491,9 @@ impl CompositorHandler for State {
             .retain(|k, v| k != surface && v != surface);
 
         self.niri.dmabuf_pre_commit_hook.remove(surface);
+        
+        // Clean up background effect tracking for this surface
+        self.niri.background_effect_state.surface_destroyed(surface);
     }
 }
 
