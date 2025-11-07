@@ -229,8 +229,9 @@ impl MappedLayer {
             let mut effective_blur = config;
             effective_blur.merge_with(&self.rules.blur);
 
-            // Only render blur if enabled and has transparency (alpha < 1.0)
-            if effective_blur.on && effective_blur.passes > 0 && alpha < 1.0 {
+            // Render blur if enabled, regardless of niri-level opacity.
+            // Layer surfaces may have application-level transparency even with opacity=1.0
+            if effective_blur.on && effective_blur.passes > 0 {
                 let corner_radius = self.rules.geometry_corner_radius.unwrap_or_default();
                 
                 // Round size to physical pixels for consistent sizing
