@@ -57,6 +57,8 @@ pub struct EffectsFramebuffers {
     pub optimized_blur: GlesTexture,
     /// Whether the optimizer blur buffer is dirty
     pub optimized_blur_rerender_at: Option<Instant>,
+    /// Alpha mask texture for per-pixel blur control
+    pub alpha_mask: Option<GlesTexture>,
     // /// Contains the original pixels before blurring to draw with in case of artifacts.
     // blur_saved_pixels: GlesTexture,
     // The blur algorithms (dual-kawase) swaps between these two whenever scaling the image
@@ -116,6 +118,7 @@ impl EffectsFramebuffers {
         let this = EffectsFramebuffers {
             optimized_blur: create_buffer(renderer, output_size).unwrap(),
             optimized_blur_rerender_at: get_rerender_at(),
+            alpha_mask: None,
             effects: create_buffer(renderer, output_size).unwrap(),
             effects_swapped: create_buffer(renderer, output_size).unwrap(),
             current_buffer: CurrentBuffer::Normal,
@@ -152,12 +155,39 @@ impl EffectsFramebuffers {
         *fx_buffers = EffectsFramebuffers {
             optimized_blur: create_buffer(renderer, output_size)?,
             optimized_blur_rerender_at: get_rerender_at(),
+            alpha_mask: None,
             effects: create_buffer(renderer, output_size)?,
             effects_swapped: create_buffer(renderer, output_size)?,
             current_buffer: CurrentBuffer::Normal,
         };
 
         Ok(())
+    }
+
+    /// Create or get the alpha mask texture for a specific window area
+    pub fn ensure_alpha_mask(
+        &mut self,
+        renderer: &mut GlesRenderer,
+        size: Size<i32, Physical>,
+    ) -> Result<&GlesTexture, GlesError> {
+        // Check if we need to create a new mask or if the existing one needs resizing
+        let needs_new_mask = match &self.alpha_mask {
+            None => true,
+            Some(mask) => {
+                let mask_size = mask.size();
+                mask_size.w != size.w || mask_size.h != size.h
+            }
+        };
+
+        if needs_new_mask {
+            let mask_buffer = renderer.create_buffer(
+                Format::Abgr8888,
+                size.to_logical(1).to_buffer(1, Transform::Normal),
+            )?;
+            self.alpha_mask = Some(mask_buffer);
+        }
+
+        Ok(self.alpha_mask.as_ref().unwrap())
     }
 
     /// Render the optimized blur buffer again
@@ -828,4 +858,46 @@ fn build_texture_mat(
     )) * tex_mat;
 
     tex_mat
+}
+
+/// Render elements to an alpha mask texture
+/// This can be used to create per-pixel alpha masks for blur effects
+pub fn render_to_mask<R, E>(
+    renderer: &mut R,
+    output: &Output,
+    elements: &[E],
+    scale: Scale<f64>,
+    size: Size<i32, Physical>,
+) -> Result<GlesTexture, GlesError>
+where
+    R: NiriRenderer,
+    E: smithay::backend::renderer::element::RenderElement<GlesRenderer>,
+{
+    let renderer = renderer.as_gles_renderer();
+    let mut fx_buffers = EffectsFramebuffers::get(output);
+    
+    // Ensure we have a mask texture of the right size
+    fx_buffers.ensure_alpha_mask(renderer, size)?;
+    
+    // Bind the mask texture as a framebuffer and render elements to it
+    let mask_texture = fx_buffers.alpha_mask.as_ref().unwrap();
+    let mut fb = renderer.bind(mask_texture)?;
+    
+    // Clear the mask to transparent
+    fb.clear([0.0, 0.0, 0.0, 0.0], &[])?;
+    
+    // Render elements
+    render_elements(
+        renderer,
+        &mut fb,
+        size,
+        scale,
+        Transform::Normal,
+        elements.iter(),
+    )?;
+    
+    drop(fb);
+    
+    // Return a clone of the mask texture
+    Ok(mask_texture.clone())
 }

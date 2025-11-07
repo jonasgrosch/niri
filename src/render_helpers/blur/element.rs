@@ -48,6 +48,8 @@ pub enum BlurRenderElement {
         loc: Point<i32, Physical>,
         output: Output,
         config: Blur,
+        /// Optional alpha mask texture for per-pixel blur control
+        mask_texture: Option<GlesTexture>,
         // FIXME: Use DamageBag and expand it as needed?
         commit_counter: CommitCounter,
     },
@@ -117,7 +119,30 @@ impl BlurRenderElement {
                 loc,
                 config,
                 output: output.clone(), // fixme i hate this
+                mask_texture: None,
                 commit_counter: CommitCounter::default(),
+            }
+        }
+    }
+
+    /// Set an alpha mask texture for per-pixel blur control.
+    /// This should be called after creating the element if mask-based blur is needed.
+    /// Only works with TrueBlur variant.
+    pub fn set_mask_texture(&mut self, mask: GlesTexture) {
+        if let Self::TrueBlur { mask_texture, .. } = self {
+            *mask_texture = Some(mask);
+        }
+    }
+
+    /// Check if this blur element needs alpha mask generation
+    /// (i.e., min_alpha/max_alpha are not at defaults)
+    pub fn needs_mask(&self) -> bool {
+        match self {
+            Self::Optimized { min_alpha, max_alpha, .. } => {
+                *min_alpha != 0.0 || *max_alpha != 1.0
+            }
+            Self::TrueBlur { config, .. } => {
+                config.min_alpha.0 != 0.0 || config.max_alpha.0 != 1.0
             }
         }
     }
@@ -229,6 +254,7 @@ fn draw_true_blur(
     opaque_regions: &[Rectangle<i32, Physical>],
     alpha: f32,
     is_tty: bool,
+    mask_texture: Option<&GlesTexture>,
 ) -> Result<(), GlesError> {
     let mut fx_buffers = EffectsFramebuffers::get(output);
     fx_buffers.current_buffer = CurrentBuffer::Normal;
@@ -259,42 +285,75 @@ fn draw_true_blur(
         )
     })??;
 
-    let (program, additional_uniforms) = if corner_radius == 0.0 {
-        (None, vec![])
-    } else {
+    // Use blur_finish shader if we have corner radius or mask texture
+    let needs_shader = corner_radius != 0.0 || mask_texture.is_some();
+    let (program, additional_uniforms) = if needs_shader {
         let program = Shaders::get_from_frame(gles_frame).blur_finish.clone();
-        (
-            program,
-            vec![
-                Uniform::new(
-                    "geo",
-                    [
-                        dst.loc.x as f32,
-                        dst.loc.y as f32,
-                        dst.size.w as f32,
-                        dst.size.h as f32,
-                    ],
-                ),
-                Uniform::new("alpha", alpha),
-                Uniform::new("noise", config.noise.0 as f32),
-                Uniform::new("corner_radius", corner_radius),
-                Uniform::new("min_alpha", config.min_alpha.0 as f32),
-                Uniform::new("max_alpha", config.max_alpha.0 as f32),
-            ],
-        )
+        let mut uniforms = vec![
+            Uniform::new(
+                "geo",
+                [
+                    dst.loc.x as f32,
+                    dst.loc.y as f32,
+                    dst.size.w as f32,
+                    dst.size.h as f32,
+                ],
+            ),
+            Uniform::new("alpha", alpha),
+            Uniform::new("noise", config.noise.0 as f32),
+            Uniform::new("corner_radius", corner_radius),
+            Uniform::new("min_alpha", config.min_alpha.0 as f32),
+            Uniform::new("max_alpha", config.max_alpha.0 as f32),
+        ];
+        
+        // Add uniform to indicate if we have a mask
+        uniforms.push(Uniform::new("has_mask", if mask_texture.is_some() { 1.0f32 } else { 0.0f32 }));
+        
+        (program, uniforms)
+    } else {
+        (None, vec![])
     };
 
-    gles_frame.render_texture_from_to(
-        &blurred_texture,
-        src,
-        dst,
-        damage,
-        opaque_regions,
-        Transform::Normal,
-        alpha,
-        program.as_ref(),
-        &additional_uniforms,
-    )
+    // Render the blurred texture with optional mask
+    if let (Some(mask), Some(prog)) = (mask_texture, program.as_ref()) {
+        // Use custom rendering path with mask texture bound to texture unit 1
+        gles_frame.with_context(|gl| unsafe {
+            use smithay::backend::renderer::gles::ffi;
+            
+            // Bind mask texture to texture unit 1
+            gl.ActiveTexture(ffi::TEXTURE1);
+            gl.BindTexture(ffi::TEXTURE_2D, mask.tex_id());
+            gl.ActiveTexture(ffi::TEXTURE0);
+        })?;
+        
+        // Set mask sampler uniform to use texture unit 1
+        let mut uniforms_with_mask = additional_uniforms.clone();
+        uniforms_with_mask.push(Uniform::new("mask", 1i32));
+        
+        gles_frame.render_texture_from_to(
+            &blurred_texture,
+            src,
+            dst,
+            damage,
+            opaque_regions,
+            Transform::Normal,
+            alpha,
+            Some(prog),
+            &uniforms_with_mask,
+        )
+    } else {
+        gles_frame.render_texture_from_to(
+            &blurred_texture,
+            src,
+            dst,
+            damage,
+            opaque_regions,
+            Transform::Normal,
+            alpha,
+            program.as_ref(),
+            &additional_uniforms,
+        )
+    }
 }
 
 impl RenderElement<GlesRenderer> for BlurRenderElement {
@@ -375,6 +434,7 @@ impl RenderElement<GlesRenderer> for BlurRenderElement {
                 scale,
                 corner_radius,
                 config,
+                mask_texture,
                 ..
             } => draw_true_blur(
                 output,
@@ -388,6 +448,7 @@ impl RenderElement<GlesRenderer> for BlurRenderElement {
                 opaque_regions,
                 self.alpha(),
                 false,
+                mask_texture.as_ref(),
             ),
         }
     }
@@ -423,6 +484,7 @@ impl<'render> RenderElement<TtyRenderer<'render>> for BlurRenderElement {
                 scale,
                 corner_radius,
                 config,
+                mask_texture,
                 ..
             } => {
                 draw_true_blur(
@@ -437,6 +499,7 @@ impl<'render> RenderElement<TtyRenderer<'render>> for BlurRenderElement {
                     opaque_regions,
                     self.alpha(),
                     true,
+                    mask_texture.as_ref(),
                 )?;
             }
         }
