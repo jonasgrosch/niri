@@ -223,42 +223,41 @@ impl MappedLayer {
         rv.normal
             .extend(self.shadow.render(renderer, location).map(Into::into));
 
-        // Add blur for layer surfaces if explicitly enabled via layer-rule
+        // Add background blur for layer surfaces (except Background layer)
+        // Blur acts as a background filter, blurring what's behind the layer
         if let (Some(output), Some(config)) = (output, blur_config) {
-            // Only apply blur if the layer has an explicit blur rule with on=true.
-            // Unlike windows, layers should NOT get blur from global config by default.
-            // This prevents background layers (wallpaper) from blurring themselves.
-            if self.rules.blur.on {
-                // Merge layer-specific blur rules with global blur config for settings
-                let mut effective_blur = config;
-                effective_blur.merge_with(&self.rules.blur);
+            // Merge layer-specific blur rules with global blur config
+            let mut effective_blur = config;
+            effective_blur.merge_with(&self.rules.blur);
 
-                // Render blur if configured with valid passes
-                if effective_blur.passes > 0 {
-                    let corner_radius = self.rules.geometry_corner_radius.unwrap_or_default();
-                    
-                    // Round size to physical pixels for consistent sizing
-                    let layer_size = size.to_physical_precise_round(self.scale).to_logical(self.scale);
-                    
-                    // Always use true blur (not optimized) for layer surfaces to match dynamic behavior.
-                    // False = use true blur which samples from framebuffer on-the-fly.
-                    // True = use optimized blur which uses pre-rendered static buffer.
-                    const USE_OPTIMIZED_BLUR: bool = false;
-                    
-                    let blur_elem = BlurRenderElement::new(
-                        renderer,
-                        output,
-                        smithay::utils::Rectangle::from_loc_and_size(location.to_i32_round(), layer_size.to_i32_round()),
-                        location.to_physical(self.scale).to_i32_round(),
-                        corner_radius.top_left,
-                        USE_OPTIMIZED_BLUR,
-                        self.scale,
-                        effective_blur,
-                    );
-                    
-                    // Insert blur before the surface elements so it appears behind
-                    rv.normal.insert(0, blur_elem.into());
-                }
+            // Apply blur to all layers except Background layer (wallpaper doesn't need background blur)
+            // Layer-specific rules can disable with blur { off true }
+            let is_background_layer = self.surface.layer() == smithay::wayland::shell::wlr_layer::Layer::Background;
+            
+            if !is_background_layer && effective_blur.on && effective_blur.passes > 0 {
+                let corner_radius = self.rules.geometry_corner_radius.unwrap_or_default();
+                
+                // Round size to physical pixels for consistent sizing
+                let layer_size = size.to_physical_precise_round(self.scale).to_logical(self.scale);
+                
+                // Always use true blur (not optimized) for layer surfaces to match dynamic behavior.
+                // False = use true blur which samples from framebuffer on-the-fly.
+                // True = use optimized blur which uses pre-rendered static buffer.
+                const USE_OPTIMIZED_BLUR: bool = false;
+                
+                let blur_elem = BlurRenderElement::new(
+                    renderer,
+                    output,
+                    smithay::utils::Rectangle::from_loc_and_size(location.to_i32_round(), layer_size.to_i32_round()),
+                    location.to_physical(self.scale).to_i32_round(),
+                    corner_radius.top_left,
+                    USE_OPTIMIZED_BLUR,
+                    self.scale,
+                    effective_blur,
+                );
+                
+                // Insert blur before the surface elements so it appears behind (background blur)
+                rv.normal.insert(0, blur_elem.into());
             }
         }
 
