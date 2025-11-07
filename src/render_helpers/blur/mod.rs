@@ -180,6 +180,7 @@ impl EffectsFramebuffers {
         };
 
         if needs_new_mask {
+            // Create mask texture at scale 1:1 (no scaling) with normal transform
             let mask_buffer = renderer.create_buffer(
                 Format::Abgr8888,
                 size.to_logical(1).to_buffer(1, Transform::Normal),

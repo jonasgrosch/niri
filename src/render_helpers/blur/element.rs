@@ -321,6 +321,8 @@ fn draw_true_blur(
             use smithay::backend::renderer::gles::ffi;
             
             // Bind mask texture to texture unit 1
+            // Note: OpenGL texture binding doesn't return errors - invalid operations
+            // are recorded in the error state which will be checked by the renderer
             gl.ActiveTexture(ffi::TEXTURE1);
             gl.BindTexture(ffi::TEXTURE_2D, mask.tex_id());
             gl.ActiveTexture(ffi::TEXTURE0);
