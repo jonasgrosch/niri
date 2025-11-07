@@ -153,6 +153,7 @@ use crate::protocols::virtual_pointer::VirtualPointerManagerState;
 use crate::pw_utils::{Cast, PipeWire};
 #[cfg(feature = "xdp-gnome-screencast")]
 use crate::pw_utils::{CastSizeChange, PwToNiri};
+use crate::render_helpers::blur::element::BlurRenderElement;
 use crate::render_helpers::blur::EffectsFramebuffers;
 use crate::render_helpers::debug::draw_opaque_regions;
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
@@ -4293,14 +4294,40 @@ impl Niri {
         if self.is_locked() {
             let state = self.output_state.get(output).unwrap();
             if let Some(surface) = state.lock_surface.as_ref() {
-                elements.extend(render_elements_from_surface_tree(
+                // Render lock surface elements
+                let lock_elements: Vec<_> = render_elements_from_surface_tree(
                     renderer,
                     surface.wl_surface(),
                     (0, 0),
                     output_scale,
                     1.,
                     Kind::ScanoutCandidate,
-                ));
+                ).collect();
+                
+                // Add background blur for lock surface if blur is enabled
+                let blur_config = self.config.borrow().layout.blur;
+                if blur_config.on && blur_config.passes > 0 {
+                    let output_size = output.current_mode().unwrap().size;
+                    let blur_elem = BlurRenderElement::new(
+                        renderer,
+                        output,
+                        Rectangle::from_loc_and_size(
+                            Point::from((0, 0)),
+                            output_size.to_logical(1),
+                        ),
+                        Point::from((0, 0)),
+                        0.0, // no corner radius for fullscreen lock
+                        false, // use true blur
+                        output_scale.x,
+                        blur_config,
+                    );
+                    // Extend with lock surface elements, then add blur
+                    // Elements are rendered in reverse order, so blur (added last) renders first (behind)
+                    elements.extend(lock_elements.into_iter().map(Into::into));
+                    elements.push(blur_elem.into());
+                } else {
+                    elements.extend(lock_elements.into_iter().map(Into::into));
+                }
             }
 
             let layer_map = layer_map_for_output(output);
