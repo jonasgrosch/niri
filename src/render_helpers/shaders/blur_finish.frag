@@ -15,6 +15,8 @@ varying vec2 v_coords;
 uniform vec4 geo;           // x, y, width, height
 uniform float corner_radius;
 uniform float noise;
+uniform float min_alpha;
+uniform float max_alpha;
 
 float rounding_alpha(vec2 coords, vec2 size, float radius) {
     vec2 center;
@@ -57,6 +59,12 @@ void main() {
     color.rgb += noiseAmount * noise;
 
     color *= rounding_alpha(loc, size, corner_radius);
+
+    // Apply alpha threshold modulation
+    // When min_alpha == 0 and max_alpha == 1, this has no effect (smoothstep(0,1,color.a) == color.a)
+    // Otherwise, it remaps the alpha range
+    float thresholded_alpha = smoothstep(min_alpha, max_alpha, color.a);
+    color.a = thresholded_alpha;
 
     color *= alpha;
 

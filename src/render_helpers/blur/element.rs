@@ -29,6 +29,8 @@ pub enum BlurRenderElement {
         corner_radius: f32,
         noise: f32,
         scale: f64,
+        min_alpha: f32,
+        max_alpha: f32,
     },
     /// Use true blur.
     ///
@@ -101,6 +103,8 @@ impl BlurRenderElement {
                 corner_radius,
                 noise: config.noise.0 as f32,
                 scale,
+                min_alpha: config.min_alpha.0 as f32,
+                max_alpha: config.max_alpha.0 as f32,
             }
         } else {
             Self::TrueBlur {
@@ -274,6 +278,8 @@ fn draw_true_blur(
                 Uniform::new("alpha", alpha),
                 Uniform::new("noise", config.noise.0 as f32),
                 Uniform::new("corner_radius", corner_radius),
+                Uniform::new("min_alpha", config.min_alpha.0 as f32),
+                Uniform::new("max_alpha", config.max_alpha.0 as f32),
             ],
         )
     };
@@ -306,6 +312,8 @@ impl RenderElement<GlesRenderer> for BlurRenderElement {
                 corner_radius,
                 noise,
                 scale,
+                min_alpha,
+                max_alpha,
             } => {
                 let downscaled_dst = Rectangle::new(
                     dst.loc,
@@ -342,6 +350,8 @@ impl RenderElement<GlesRenderer> for BlurRenderElement {
                             Uniform::new("corner_radius", *corner_radius),
                             Uniform::new("noise", *noise),
                             Uniform::new("alpha", self.alpha()),
+                            Uniform::new("min_alpha", *min_alpha),
+                            Uniform::new("max_alpha", *max_alpha),
                         ],
                     );
 
