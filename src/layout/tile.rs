@@ -1285,7 +1285,9 @@ impl<W: LayoutElement> Tile<W> {
 
         let blur_element = (blur_config.on && output.is_some())
             .then(|| {
-                let optimized = !self.window.is_floating();
+                // Always use true blur (on-the-fly) for all windows to match Hyprland behavior.
+                // This ensures blur reflects actual background content dynamically.
+                let optimized = false;
 
                 Some(
                     BlurRenderElement::new(

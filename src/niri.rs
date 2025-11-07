@@ -153,6 +153,7 @@ use crate::protocols::virtual_pointer::VirtualPointerManagerState;
 use crate::pw_utils::{Cast, PipeWire};
 #[cfg(feature = "xdp-gnome-screencast")]
 use crate::pw_utils::{CastSizeChange, PwToNiri};
+use crate::render_helpers::blur::element::BlurRenderElement;
 use crate::render_helpers::blur::EffectsFramebuffers;
 use crate::render_helpers::debug::draw_opaque_regions;
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
@@ -4293,14 +4294,40 @@ impl Niri {
         if self.is_locked() {
             let state = self.output_state.get(output).unwrap();
             if let Some(surface) = state.lock_surface.as_ref() {
-                elements.extend(render_elements_from_surface_tree(
+                // Render lock surface elements
+                let lock_elements: Vec<WaylandSurfaceRenderElement<R>> = render_elements_from_surface_tree(
                     renderer,
                     surface.wl_surface(),
                     (0, 0),
                     output_scale,
                     1.,
                     Kind::ScanoutCandidate,
-                ));
+                );
+                
+                // Add background blur for lock surface if blur is enabled
+                let blur_config = self.config.borrow().layout.blur;
+                if blur_config.on && blur_config.passes > 0 {
+                    let output_size = output.current_mode().unwrap().size;
+                    let blur_elem = BlurRenderElement::new(
+                        renderer,
+                        output,
+                        Rectangle::from_loc_and_size(
+                            Point::from((0, 0)),
+                            output_size.to_logical(1),
+                        ),
+                        Point::from((0, 0)),
+                        0.0, // no corner radius for fullscreen lock
+                        false, // use true blur
+                        output_scale.x,
+                        blur_config,
+                    );
+                    // Extend with lock surface elements, then add blur
+                    // Elements are rendered in reverse order, so blur (added last) renders first (behind)
+                    elements.extend(lock_elements.into_iter().map(Into::into));
+                    elements.push(blur_elem.into());
+                } else {
+                    elements.extend(lock_elements.into_iter().map(Into::into));
+                }
             }
 
             let layer_map = layer_map_for_output(output);
@@ -4309,6 +4336,7 @@ impl Niri {
                 self.render_layer_filtered(
                     renderer,
                     target,
+                    output,
                     &layer_map,
                     layer,
                     &mut layer_elems,
@@ -4396,7 +4424,7 @@ impl Niri {
         let layer_map = layer_map_for_output(output);
         let mut extend_from_layer =
             |elements: &mut SplitElements<LayerSurfaceRenderElement<R>>, layer, for_backdrop| {
-                self.render_layer(renderer, target, &layer_map, layer, elements, for_backdrop);
+                self.render_layer(renderer, target, output, &layer_map, layer, elements, for_backdrop);
             };
 
         // The overlay layer elements go next.
@@ -4511,25 +4539,11 @@ impl Niri {
             draw_opaque_regions(&mut elements, output_scale);
         }
 
-        // In case the optimized blur layer is dirty, re-render
-        // It only has the bottom and background layer shells drawn onto with blur applied.
-        //
-        // We must do it now before we actually render the previous render elements into the final
-        // composited blur buffer
-        let mut fx_buffers = EffectsFramebuffers::get(output);
-        let blur_config = self.config.borrow().layout.blur;
-
-        if blur_config.on && blur_config.passes > 0 {
-            if let Err(err) = fx_buffers.update_optimized_blur_buffer(
-                renderer.as_gles_renderer(),
-                layer_map,
-                output,
-                output_scale,
-                blur_config,
-            ) {
-                error!(?err, "Failed to update optimized blur buffer");
-            }
-        }
+        // NOTE: Optimized blur buffer update removed as we now use true blur for all windows.
+        // True blur computes the blur on-the-fly from the actual framebuffer content,
+        // making it responsive to dynamic wallpapers and window changes, similar to Hyprland.
+        // The optimized blur was only rendering static layer shells, which didn't provide
+        // the desired dynamic blur behavior.
 
         elements
     }
@@ -4539,6 +4553,7 @@ impl Niri {
         &self,
         renderer: &mut R,
         target: RenderTarget,
+        output: &Output,
         layer_map: &LayerMap,
         layer: Layer,
         elements: &mut SplitElements<LayerSurfaceRenderElement<R>>,
@@ -4564,7 +4579,16 @@ impl Niri {
             Some((mapped, geo))
         });
         for (mapped, geo) in iter {
-            elements.extend(mapped.render(renderer, geo.loc.to_f64(), target));
+            let blur_config = self.config.borrow().layout.blur;
+            let output_ref = Some(output);
+            elements.extend(mapped.render(
+                renderer,
+                geo.loc.to_f64(),
+                geo.size.to_f64(),
+                target,
+                output_ref,
+                Some(blur_config),
+            ));
         }
     }
 
@@ -4573,6 +4597,7 @@ impl Niri {
         &self,
         renderer: &mut R,
         target: RenderTarget,
+        output: &Output,
         layer_map: &LayerMap,
         layer: Layer,
         elements: &mut SplitElements<LayerSurfaceRenderElement<R>>,
@@ -4581,6 +4606,7 @@ impl Niri {
         self.render_layer_filtered(
             renderer,
             target,
+            output,
             layer_map,
             layer,
             elements,
@@ -6530,6 +6556,7 @@ niri_render_elements! {
         Wayland = WaylandSurfaceRenderElement<R>,
         NamedPointer = MemoryRenderBufferRenderElement<R>,
         SolidColor = SolidColorRenderElement,
+        Blur = BlurRenderElement,
         ScreenshotUi = ScreenshotUiRenderElement,
         ExitConfirmDialog = ExitConfirmDialogRenderElement,
         Texture = PrimaryGpuTextureRenderElement,

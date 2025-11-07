@@ -12,6 +12,7 @@ use super::ResolvedLayerRules;
 use crate::animation::Clock;
 use crate::layout::shadow::Shadow;
 use crate::niri_render_elements;
+use crate::render_helpers::blur::element::BlurRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::shadow::ShadowRenderElement;
 use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
@@ -47,6 +48,7 @@ niri_render_elements! {
         Wayland = WaylandSurfaceRenderElement<R>,
         SolidColor = SolidColorRenderElement,
         Shadow = ShadowRenderElement,
+        Blur = BlurRenderElement,
     }
 }
 
@@ -165,7 +167,10 @@ impl MappedLayer {
         &self,
         renderer: &mut R,
         location: Point<f64, Logical>,
+        size: Size<f64, Logical>,
         target: RenderTarget,
+        output: Option<&smithay::output::Output>,
+        blur_config: Option<niri_config::Blur>,
     ) -> SplitElements<LayerSurfaceRenderElement<R>> {
         let mut rv = SplitElements::default();
 
@@ -217,6 +222,46 @@ impl MappedLayer {
         let location = location.to_physical_precise_round(scale).to_logical(scale);
         rv.normal
             .extend(self.shadow.render(renderer, location).map(Into::into));
+
+        // Add background blur for layer surfaces (except Background layer)
+        // Blur acts as a background filter, blurring what's behind the layer
+        // NOTE: Elements are rendered in REVERSE order, so adding to the end means rendering first (behind)
+        if let (Some(output), Some(config)) = (output, blur_config) {
+            // Merge layer-specific blur rules with global blur config
+            let mut effective_blur = config;
+            effective_blur.merge_with(&self.rules.blur);
+
+            // Apply blur to all layers except Background layer (wallpaper doesn't need background blur)
+            // Layer-specific rules can disable with blur { off true }
+            let is_background_layer = self.surface.layer() == smithay::wayland::shell::wlr_layer::Layer::Background;
+            
+            if !is_background_layer && effective_blur.on && effective_blur.passes > 0 {
+                let corner_radius = self.rules.geometry_corner_radius.unwrap_or_default();
+                
+                // Round size to physical pixels for consistent sizing
+                let layer_size = size.to_physical_precise_round(self.scale).to_logical(self.scale);
+                
+                // Always use true blur (not optimized) for layer surfaces to match dynamic behavior.
+                // False = use true blur which samples from framebuffer on-the-fly.
+                // True = use optimized blur which uses pre-rendered static buffer.
+                const USE_OPTIMIZED_BLUR: bool = false;
+                
+                let blur_elem = BlurRenderElement::new(
+                    renderer,
+                    output,
+                    smithay::utils::Rectangle::from_loc_and_size(location.to_i32_round(), layer_size.to_i32_round()),
+                    location.to_physical(self.scale).to_i32_round(),
+                    corner_radius.top_left,
+                    USE_OPTIMIZED_BLUR,
+                    self.scale,
+                    effective_blur,
+                );
+                
+                // Push blur to the end so it's rendered first (elements are processed in reverse)
+                // This places blur behind the surface as a background blur effect
+                rv.normal.push(blur_elem.into());
+            }
+        }
 
         rv
     }
