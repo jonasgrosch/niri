@@ -76,6 +76,7 @@ pub use crate::handlers::xdg_shell::KdeDecorationsModeState;
 use crate::layout::workspace::WorkspaceId;
 use crate::layout::ActivateWindow;
 use crate::niri::{DndIcon, NewClient, State};
+use crate::protocols::background_effect::{BackgroundEffectHandler, BackgroundEffectManagerState};
 use crate::protocols::ext_workspace::{self, ExtWorkspaceHandler, ExtWorkspaceManagerState};
 use crate::protocols::foreign_toplevel::{
     self, ForeignToplevelHandler, ForeignToplevelManagerState,
@@ -91,9 +92,9 @@ use crate::protocols::virtual_pointer::{
 };
 use crate::utils::{output_size, send_scale_transform};
 use crate::{
-    delegate_ext_workspace, delegate_foreign_toplevel, delegate_gamma_control,
-    delegate_mutter_x11_interop, delegate_output_management, delegate_screencopy,
-    delegate_virtual_pointer,
+    delegate_background_effect, delegate_ext_workspace, delegate_foreign_toplevel,
+    delegate_gamma_control, delegate_mutter_x11_interop, delegate_output_management,
+    delegate_screencopy, delegate_virtual_pointer,
 };
 
 pub const XDG_ACTIVATION_TOKEN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -824,6 +825,13 @@ impl OutputManagementHandler for State {
     }
 }
 delegate_output_management!(State);
+
+impl BackgroundEffectHandler for State {
+    fn background_effect_manager_state(&mut self) -> &mut BackgroundEffectManagerState {
+        &mut self.niri.background_effect_state
+    }
+}
+delegate_background_effect!(State);
 
 impl MutterX11InteropHandler for State {}
 delegate_mutter_x11_interop!(State);
