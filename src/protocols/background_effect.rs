@@ -43,6 +43,18 @@ pub struct SurfaceBackgroundEffectState {
     pub effect_type: RefCell<Option<String>>,
 }
 
+impl SurfaceBackgroundEffectState {
+    /// Get the current background effect type for a surface
+    pub fn get_effect_type(surface: &WlSurface) -> Option<String> {
+        with_states(surface, |states| {
+            states
+                .data_map
+                .get::<SurfaceBackgroundEffectState>()
+                .and_then(|state| state.effect_type.borrow().clone())
+        })
+    }
+}
+
 impl BackgroundEffectManagerState {
     pub fn new<D, F>(display: &DisplayHandle, filter: F) -> Self
     where
