@@ -225,6 +225,7 @@ impl MappedLayer {
 
         // Add background blur for layer surfaces (except Background layer)
         // Blur acts as a background filter, blurring what's behind the layer
+        // NOTE: Elements are rendered in REVERSE order, so adding to the end means rendering first (behind)
         if let (Some(output), Some(config)) = (output, blur_config) {
             // Merge layer-specific blur rules with global blur config
             let mut effective_blur = config;
@@ -256,8 +257,9 @@ impl MappedLayer {
                     effective_blur,
                 );
                 
-                // Insert blur before the surface elements so it appears behind (background blur)
-                rv.normal.insert(0, blur_elem.into());
+                // Push blur to the end so it's rendered first (elements are processed in reverse)
+                // This places blur behind the surface as a background blur effect
+                rv.normal.push(blur_elem.into());
             }
         }
 
